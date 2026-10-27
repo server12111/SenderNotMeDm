@@ -68,7 +68,7 @@ async def order_decide(cb: CallbackQuery, callback_data: Nav, session: AsyncSess
     if ok:
         await grant_subscription(
             session, o.user_id, plan_name=o.plan_name, days=o.days, max_accounts=o.max_accounts,
-            daily_limit=o.daily_limit, max_recipients=o.max_recipients, plan_id=o.plan_id,
+            daily_limit=o.daily_limit, max_recipients=o.max_recipients, max_parse=o.max_parse, plan_id=o.plan_id,
             source="order", amount=o.price_usd, order_id=o.id, granted_by=cb.from_user.id)
     user_text = (f"✅ Оплата подтверждена! Тариф <b>{esc(o.plan_name)}</b> активирован ({days_text(o.days)})."
                  if ok else f"❌ Заявка #{o.id} отклонена: платёж не найден. Если вы оплатили, свяжитесь с поддержкой.")

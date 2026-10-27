@@ -4,7 +4,7 @@ from bot.ui import btn, kb, nav, to_main
 def main_menu(is_admin: bool):
     rows = [
         [btn("🚀 Рассылки", nav("camps"), style="primary")],
-        [btn("👤 Аккаунты", nav("accs")), btn("🎯 Базы", nav("leads"))],
+        [btn("👤 Аккаунты", nav("accs")), btn("🧲 Парсер", nav("parser"))],
         [btn("💎 Профиль", nav("profile"))],
     ]
     if is_admin:

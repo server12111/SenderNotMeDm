@@ -9,13 +9,14 @@ from aiogram.fsm.storage.redis import RedisStorage
 from bot.config import settings
 from bot.database.base import make_sessionmaker
 from bot.database.migrate import upgrade_to_head
-from bot.handlers import accounts, billing, campaigns, fallback, leads, menu
+from bot.handlers import accounts, billing, campaigns, fallback, leads, menu, parser
 from bot.handlers.admin import catalog, notices, orders, panel
 from bot.middlewares.db import DbMiddleware
 from bot.services.accounts import LoginManager
 from bot.services.broadcast import BroadcastManager
-from bot.services.live import LiveUpdater, NoticeLive
+from bot.services.live import LiveUpdater, NoticeLive, ParserLive
 from bot.services.notices import NoticeManager
+from bot.services.parser import ParserManager
 from bot.services.subscriptions import expiry_loop
 
 log = logging.getLogger("bot")
@@ -38,10 +39,11 @@ async def main() -> None:
     manager, notice_mgr = BroadcastManager(bot, sm), NoticeManager(bot, sm)
     live, notice_live = LiveUpdater(bot), NoticeLive(bot)
     dp = Dispatcher(storage=storage, manager=manager, logins=LoginManager(sm), live=live,
-                    notices=notice_mgr, notice_live=notice_live)
+                    notices=notice_mgr, notice_live=notice_live, parsers=ParserManager(bot, sm),
+                    parser_live=ParserLive(bot))
     dp.update.outer_middleware(DbMiddleware(sm))
     dp.include_routers(panel.router, notices.router, catalog.router, orders.router, menu.router, billing.router,
-                       accounts.router, leads.router, campaigns.router, fallback.router)
+                       accounts.router, leads.router, parser.router, campaigns.router, fallback.router)
 
     await manager.recover(live)           # дослать рассылки, прерванные рестартом
     await notice_mgr.recover(notice_live)

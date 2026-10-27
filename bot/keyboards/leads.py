@@ -4,7 +4,8 @@ from bot.ui import back, btn, kb, nav, pager, to_main
 def leads_list(tags: list[tuple[str, int, int]], page: int, pages: int):
     rows = [[btn(f"🎯 {tag} · {alive}/{total}", nav("lead", v=tag))] for tag, total, alive in tags]
     return kb(*rows, pager("leads", page, pages),
-              [btn("📥 Новая база", nav("lead_new"), style="success")], to_main())
+              [btn("📥 Новая база", nav("lead_new"), style="success"), btn("🧲 Спарсить", nav("parser"))],
+              to_main())
 
 
 def lead_card(tag: str, dead: int):

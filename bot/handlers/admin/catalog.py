@@ -79,6 +79,8 @@ SPECS: dict[str, dict] = {
         Field("daily_limit", "Дневной лимит на аккаунт", "Потолок сообщений в сутки с одного аккаунта",
               p_int(1, 5000)),
         Field("max_recipients", "Получателей в рассылке", "<code>0</code> — без лимита", p_int(0, 10_000_000)),
+        Field("max_parse", "Лимит парсинга", "Сколько контактов можно собрать за один раз. <code>0</code> — без лимита",
+              p_int(0, 10_000_000)),
     ]},
     "method": {"title": "Новый способ оплаты", "model": PaymentMethod, "back": nav("adm_methods"), "fields": [
         Field("title", "Название", "Например: USDT TRC20 или Карта", p_text(64)),
@@ -91,6 +93,8 @@ SPECS: dict[str, dict] = {
         Field("free_max_accounts", "Максимум аккаунтов", "Для пользователей без тарифа", p_int(0, 1000)),
         Field("free_daily_limit", "Дневной лимит на аккаунт", "Сообщений в сутки с одного аккаунта", p_int(1, 5000)),
         Field("free_max_recipients", "Получателей в рассылке", "<code>0</code> — без лимита",
+              p_int(0, 10_000_000)),
+        Field("free_max_parse", "Лимит парсинга", "Контактов за один раз. <code>0</code> — без лимита",
               p_int(0, 10_000_000)),
     ]},
 }
@@ -108,14 +112,14 @@ async def plan_view(session: AsyncSession, pid: int, note: str = ""):
     buyers = await session.scalar(select(func.count(Subscription.id)).where(Subscription.plan_id == p.id))
     return (f"💎 <b>{esc(p.name)}</b> {'' if p.is_active else '· ⚫ скрыт'}\n{SEP}\n"
             f"💵 Цена: <b>{fmt_usd(p.price)}</b>\n📅 Срок: <b>{days_text(p.duration_days)}</b>\n"
-            f"{limits_text(p.max_accounts, p.daily_limit, p.max_recipients)}\n{SEP}\n"
+            f"{limits_text(p.max_accounts, p.daily_limit, p.max_recipients, p.max_parse)}\n{SEP}\n"
             f"🛒 Выдано подписок: {buyers}{note}"), K.plan_card(p)
 
 
 async def free_view(session: AsyncSession, note: str = ""):
     f = await free_limits(session)
     return (f"🆓 <b>Free-тариф</b>\n{SEP}\nЛимиты для пользователей без оплаченного тарифа:\n\n"
-            f"{limits_text(f.max_accounts, f.daily_limit, f.max_recipients)}{note}"), K.free_card()
+            f"{limits_text(f.max_accounts, f.daily_limit, f.max_recipients, f.max_parse)}{note}"), K.free_card()
 
 
 async def method_view(session: AsyncSession, mid: int, note: str = ""):
@@ -283,7 +287,8 @@ async def edit_start(cb: CallbackQuery, callback_data: Nav, state: FSMContext, s
     if kind == "free":
         current = getattr(await free_limits(session), {"free_max_accounts": "max_accounts",
                                                        "free_daily_limit": "daily_limit",
-                                                       "free_max_recipients": "max_recipients"}[key])
+                                                       "free_max_recipients": "max_recipients",
+                                                       "free_max_parse": "max_parse"}[key])
     else:
         obj = await session.get(SPECS[kind]["model"], callback_data.id)
         if not obj:

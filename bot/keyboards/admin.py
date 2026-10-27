@@ -112,6 +112,7 @@ def plan_card(p: Plan):
         [e("name", "✏️ Название"), e("price", "✏️ Цена")],
         [e("duration_days", "✏️ Срок"), e("max_accounts", "✏️ Аккаунты")],
         [e("daily_limit", "✏️ Лимит/сутки"), e("max_recipients", "✏️ Получатели")],
+        [e("max_parse", "✏️ Лимит парсинга")],
         [btn("⚫ Скрыть из продажи" if p.is_active else "💎 Вернуть в продажу", nav("adm_plan_toggle", p.id)),
          btn("🗑 Удалить", nav("adm_plan_del", p.id), style="danger")],
         back("adm_plans", text="◀️ К тарифам"),
@@ -121,7 +122,8 @@ def plan_card(p: Plan):
 def free_card():
     e = lambda f, label: btn(label, nav("adm_edit", 0, v=f"free.{f}"))  # noqa: E731
     return kb([e("free_max_accounts", "✏️ Аккаунты"), e("free_daily_limit", "✏️ Лимит/сутки")],
-              [e("free_max_recipients", "✏️ Получатели в рассылке")], back("adm_plans", text="◀️ К тарифам"))
+              [e("free_max_recipients", "✏️ Получатели в рассылке"), e("free_max_parse", "✏️ Лимит парсинга")],
+              back("adm_plans", text="◀️ К тарифам"))
 
 
 def methods_list(methods: list[PaymentMethod]):

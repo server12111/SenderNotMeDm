@@ -41,3 +41,7 @@ class NoticeForm(StatesGroup):
 
 class UserMsgForm(StatesGroup):
     text = State()
+
+
+class ParserForm(StatesGroup):
+    input = State()

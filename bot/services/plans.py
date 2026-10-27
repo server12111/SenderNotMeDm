@@ -12,6 +12,7 @@ FREE_DEFAULTS = {
     "free_max_accounts": 1,
     "free_daily_limit": 20,
     "free_max_recipients": 50,
+    "free_max_parse": 100,
 }
 
 
@@ -23,6 +24,7 @@ class Limits:
     max_recipients: int  # 0 = без лимита
     expires_at: datetime | None = None
     is_free: bool = False
+    max_parse: int = 0  # контактов за один парсинг, 0 = без лимита
 
 
 def utcnow() -> datetime:
@@ -49,7 +51,8 @@ async def set_setting(session: AsyncSession, key: str, value: str) -> None:
 async def free_limits(session: AsyncSession) -> Limits:
     return Limits("Free", await get_setting_int(session, "free_max_accounts"),
                   await get_setting_int(session, "free_daily_limit"),
-                  await get_setting_int(session, "free_max_recipients"), is_free=True)
+                  await get_setting_int(session, "free_max_recipients"), is_free=True,
+                  max_parse=await get_setting_int(session, "free_max_parse"))
 
 
 async def active_subscription(session: AsyncSession, user_id: int) -> Subscription | None:
@@ -66,11 +69,12 @@ async def get_limits(session: AsyncSession, user_id: int) -> Limits:
     sub = await active_subscription(session, user_id)
     if not sub:
         return await free_limits(session)
-    return Limits(sub.plan_name, sub.max_accounts, sub.daily_limit, sub.max_recipients, sub.expires_at)
+    return Limits(sub.plan_name, sub.max_accounts, sub.daily_limit, sub.max_recipients, sub.expires_at,
+                  max_parse=sub.max_parse)
 
 
 async def grant_subscription(session: AsyncSession, user_id: int, *, plan_name: str, days: int,
-                             max_accounts: int, daily_limit: int, max_recipients: int,
+                             max_accounts: int, daily_limit: int, max_recipients: int, max_parse: int = 0,
                              plan_id: int | None = None, source: str = "admin", amount=0,
                              order_id: int | None = None, granted_by: int | None = None) -> Subscription:
     """Новая подписка. Если есть действующая с датой окончания, срок добавляется к ней, а старая помечается replaced."""
@@ -83,7 +87,7 @@ async def grant_subscription(session: AsyncSession, user_id: int, *, plan_name: 
         await session.execute(update(Subscription).where(Subscription.id == current.id).values(status="replaced"))
     sub = Subscription(
         user_id=user_id, plan_id=plan_id, plan_name=plan_name, max_accounts=max_accounts,
-        daily_limit=daily_limit, max_recipients=max_recipients, source=source, amount=amount,
+        daily_limit=daily_limit, max_recipients=max_recipients, max_parse=max_parse, source=source, amount=amount,
         order_id=order_id, granted_by=granted_by, starts_at=now,
         expires_at=None if days == 0 else start + timedelta(days=days))
     session.add(sub)

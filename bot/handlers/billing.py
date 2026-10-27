@@ -26,9 +26,9 @@ async def plans(cb: CallbackQuery, session: AsyncSession) -> None:
     lines = [f"💳 <b>Тарифы</b>\n{SEP}",
              f"Ваш тариф: <b>{esc(cur.name)}</b>" + (f" · до {fmt_dt(cur.expires_at)}" if cur.expires_at else ""), ""]
     lines += [f"🆓 <b>Free</b>: {free.max_accounts} акк. · {free.daily_limit}/сут · "
-              f"{free.max_recipients or '∞'} получ."]
+              f"{free.max_recipients or '∞'} получ. · парсинг {free.max_parse or '∞'}"]
     lines += [f"💎 <b>{esc(p.name)}</b> · {fmt_usd(p.price)} · {days_text(p.duration_days)}: "
-              f"{p.max_accounts} акк. · {p.daily_limit}/сут · {p.max_recipients or '∞'} получ." for p in items]
+              f"{p.max_accounts} акк. · {p.daily_limit}/сут · {p.max_recipients or '∞'} получ. · парсинг {p.max_parse or '∞'}" for p in items]
     if not items:
         lines.append("\n<i>Платные тарифы скоро появятся.</i>")
     rows = [[btn(f"💎 {p.name} · {fmt_usd(p.price)}", nav("plan", p.id), style="success")] for p in items]
@@ -43,7 +43,7 @@ async def plan(cb: CallbackQuery, callback_data: Nav, session: AsyncSession) -> 
     methods = (await session.scalars(select(PaymentMethod).where(PaymentMethod.is_enabled.is_(True))
                                      .order_by(PaymentMethod.sort, PaymentMethod.id))).all()
     text = (f"💎 <b>{esc(p.name)}</b>\n{SEP}\n💵 Цена: <b>{fmt_usd(p.price)}</b>\n📅 Срок: <b>{days_text(p.duration_days)}"
-            f"</b>\n{limits_text(p.max_accounts, p.daily_limit, p.max_recipients)}\n{SEP}\n" +
+            f"</b>\n{limits_text(p.max_accounts, p.daily_limit, p.max_recipients, p.max_parse)}\n{SEP}\n" +
             ("Выберите способ оплаты:" if methods else "⚠️ Оплата временно недоступна: способы оплаты не настроены."))
     rows = [[btn(f"{m.title} · {format_amount(p.price, m.rate, m.currency)}", nav("pay", p.id, m.id))]
             for m in methods]
@@ -62,7 +62,7 @@ async def pay(cb: CallbackQuery, callback_data: Nav, session: AsyncSession) -> N
         return await cb.answer("Слишком много открытых заявок. Дождитесь решения или отмените лишние.",
                                show_alert=True)
     o = Order(user_id=cb.from_user.id, plan_id=p.id, plan_name=p.name, days=p.duration_days,
-              max_accounts=p.max_accounts, daily_limit=p.daily_limit, max_recipients=p.max_recipients,
+              max_accounts=p.max_accounts, daily_limit=p.daily_limit, max_recipients=p.max_recipients, max_parse=p.max_parse,
               price_usd=p.price, method_id=m.id, method_title=m.title,
               amount_text=format_amount(p.price, m.rate, m.currency), details=m.details, status="new")
     session.add(o)

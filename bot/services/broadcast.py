@@ -20,6 +20,7 @@ from telethon import TelegramClient, errors
 
 from bot.config import settings
 from bot.database.models import Account, BroadcastLog, Campaign, CampaignStatus, DeliveryStatus, ParsedLead
+from bot.services import busy
 from bot.services.accounts import open_client
 from bot.services.message_builder import compose
 from bot.services.plans import get_limits
@@ -175,24 +176,39 @@ class BroadcastManager:
         except Exception:
             log.debug("notify failed", exc_info=True)
 
-    async def _open_accounts(self, c: Campaign) -> list[_Acc]:
+    async def _open_accounts(self, c: Campaign) -> tuple[list[_Acc], int]:
+        """Открытые клиенты и число аккаунтов, занятых другой задачей."""
         today = date.today()
         async with self.sm() as s:
             models = (await s.scalars(usable_accounts_stmt(c.owner_id))).all()
             cap = (await get_limits(s, c.owner_id)).daily_limit
-        accs = []
-        for m in models:
-            try:
-                client = await open_client(m)
-            except Exception:
-                log.exception("account %s connect failed", m.id)
-                client = None
-            if client is None:
-                await self._mark_account(m.id, status="dead")
-                await self._notify(c.owner_id, f"⚠️ Аккаунт {m.phone} разлогинен — подключите заново.")
-                continue
-            accs.append(_Acc(m, client, m.sent_today if m.sent_date == today else 0, limit=min(m.daily_limit, cap)))
-        return accs
+        accs: list[_Acc] = []
+        taken: list[int] = []
+        n_busy = 0
+        try:
+            for m in models:
+                if not busy.acquire(m.id, "campaign"):
+                    n_busy += 1
+                    continue
+                taken.append(m.id)
+                try:
+                    client = await open_client(m)
+                except Exception:
+                    log.exception("account %s connect failed", m.id)
+                    client = None
+                if client is None:
+                    busy.release(m.id)
+                    taken.remove(m.id)
+                    await self._mark_account(m.id, status="dead")
+                    await self._notify(c.owner_id, f"⚠️ Аккаунт {m.phone} разлогинен — подключите заново.")
+                    continue
+                accs.append(_Acc(m, client, m.sent_today if m.sent_date == today else 0,
+                                 limit=min(m.daily_limit, cap)))
+        except BaseException:
+            for acc_id in taken:
+                busy.release(acc_id)
+            raise
+        return accs, n_busy
 
     async def _mark_account(self, acc_id: int, **values) -> None:
         async with self.sm() as s:
@@ -213,11 +229,14 @@ class BroadcastManager:
             s.expunge(c)
 
         run: _Run | None = None
+        accs: list[_Acc] = []
         final = CampaignStatus.DONE
         try:
-            accs = await self._open_accounts(c)
+            accs, n_busy = await self._open_accounts(c)
             if not accs:
-                await self._notify(c.owner_id, f"🛑 Рассылка «{c.name}»: нет рабочих аккаунтов.")
+                why = ("все аккаунты заняты другой задачей (парсинг или другая рассылка)" if n_busy
+                       else "нет рабочих аккаунтов")
+                await self._notify(c.owner_id, f"🛑 Рассылка «{c.name}»: {why}.")
                 final = CampaignStatus.STOPPED
                 return
             run = _Run(c, ctl, await self._prepare_media(c), accs)
@@ -244,6 +263,8 @@ class BroadcastManager:
                 await self._flush(run, None)
                 for a in run.accs:
                     await a.client.disconnect()
+            for a in accs:
+                busy.release(a.model.id)  # аккаунты свободны для парсера и других рассылок
             async with self.sm() as s:
                 await s.execute(update(Campaign).where(Campaign.id == cid).values(
                     status=final.value, finished_at=datetime.now(timezone.utc)))

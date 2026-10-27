@@ -162,7 +162,7 @@ async def grant_do(cb: CallbackQuery, callback_data: Nav, session: AsyncSession)
         return await cb.answer("Не найдено", show_alert=True)
     sub = await grant_subscription(
         session, user.id, plan_name=plan.name, days=plan.duration_days, max_accounts=plan.max_accounts,
-        daily_limit=plan.daily_limit, max_recipients=plan.max_recipients, plan_id=plan.id,
+        daily_limit=plan.daily_limit, max_recipients=plan.max_recipients, max_parse=plan.max_parse, plan_id=plan.id,
         source="admin", granted_by=cb.from_user.id)
     try:
         await cb.bot.send_message(user.id, f"🎁 Вам выдан тариф <b>{esc(plan.name)}</b> "

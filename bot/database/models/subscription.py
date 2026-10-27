@@ -22,6 +22,7 @@ class Subscription(Base):
     max_accounts: Mapped[int] = mapped_column(default=1)
     daily_limit: Mapped[int] = mapped_column(default=20)
     max_recipients: Mapped[int] = mapped_column(default=0)
+    max_parse: Mapped[int] = mapped_column(default=0, server_default="0")
 
     source: Mapped[str] = mapped_column(String(16), default="admin")  # order / admin
     status: Mapped[str] = mapped_column(String(12), default="active")  # active / expired / cancelled / replaced

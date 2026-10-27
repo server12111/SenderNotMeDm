@@ -141,9 +141,9 @@ async def _import(msg: Message, state: FSMContext, session: AsyncSession, raw: s
     names = set(matches)
     added = 0
     ordered = sorted(names)
-    for i in range(0, len(ordered), 500):
+    for i in range(0, len(ordered), 300):  # 300 × 3 колонки < 999: лимит переменных старых SQLite
         res = await session.execute(insert(ParsedLead).values(
-            [{"owner_id": msg.from_user.id, "tag": tag, "username": n} for n in ordered[i:i + 500]]
+            [{"owner_id": msg.from_user.id, "tag": tag, "username": n} for n in ordered[i:i + 300]]
         ).on_conflict_do_nothing())
         added += res.rowcount
     await session.commit()

@@ -64,7 +64,7 @@ async def profile(cb: CallbackQuery, session: AsyncSession) -> None:
     await show(cb, (
         f"💎 <b>Профиль</b>\n{SEP}\n🆔 ID: <code>{uid}</code>\n👤 Username: {uname}\n"
         f"📅 В боте с: {fmt_dt(user.created_at)}\n💳 Тариф: <b>{esc(lim.name)}</b>{until}\n"
-        f"{limits_text(lim.max_accounts, lim.daily_limit, lim.max_recipients)}\n{SEP}\n"
+        f"{limits_text(lim.max_accounts, lim.daily_limit, lim.max_recipients, lim.max_parse)}\n{SEP}\n"
         f"👤 Аккаунтов: <b>{accs}</b>\n🚀 Рассылок: <b>{camps}</b>\n✅ Всего доставлено: <b>{sent}</b>\n{SEP}\n"
         "<i>Отправляйте сообщения только тем, кто может быть заинтересован, и соблюдайте правила Telegram: "
         "жалобы получателей приводят к ограничению аккаунтов.</i>"), profile_kb())

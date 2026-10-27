@@ -42,6 +42,7 @@ class Order(Base):
     max_accounts: Mapped[int] = mapped_column(default=1)
     daily_limit: Mapped[int] = mapped_column(default=20)
     max_recipients: Mapped[int] = mapped_column(default=0)
+    max_parse: Mapped[int] = mapped_column(default=0, server_default="0")
     price_usd: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     method_id: Mapped[int | None] = mapped_column(ForeignKey("payment_methods.id", ondelete="SET NULL"))
     method_title: Mapped[str] = mapped_column(String(64))

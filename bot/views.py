@@ -75,9 +75,10 @@ def days_text(d: int) -> str:
     return "навсегда" if d == 0 else f"{d} дн."
 
 
-def limits_text(accounts: int, daily: int, recipients: int) -> str:
+def limits_text(accounts: int, daily: int, recipients: int, parse: int | None = None) -> str:
+    parse_line = "" if parse is None else f"\n🧲 Парсинг за раз: <b>{'без лимита' if parse == 0 else parse}</b>"
     return (f"👤 Макс. аккаунтов: <b>{accounts}</b>\n📊 До <b>{daily}</b> сообщений в сутки на аккаунт\n"
-            f"🎯 Получателей в рассылке: <b>{'без лимита' if recipients == 0 else recipients}</b>")
+            f"🎯 Получателей в рассылке: <b>{'без лимита' if recipients == 0 else recipients}</b>{parse_line}")
 
 
 def format_amount(price, rate, currency: str) -> str:
@@ -93,3 +94,35 @@ def notice_card_text(n) -> str:
         bar(done, n.total) + f"  ({done}/{n.total})",
         f"✅ Доставлено: <b>{n.sent}</b>", f"🚫 Заблокировали бота: <b>{n.blocked}</b>",
         f"⚠️ Ошибки: <b>{n.failed}</b>"])
+
+
+# ---------- парсер ----------
+JOB_STATUS = {"running": "🚀 Идёт", "done": "✅ Завершён", "stopped": "🛑 Остановлен", "failed": "❌ Ошибка"}
+
+
+def parser_card_text(j) -> str:
+    from bot.services.parser import MODES, SOURCES, UNITS  # локально: избегаем циклического импорта
+    sec = int(j.elapsed)
+    lines = [f"🧲 <b>Парсинг</b> · {SOURCES[j.source]}", f"Режим: {MODES[j.mode]}", JOB_STATUS[j.status], SEP]
+    if j.total:
+        lines.append(f"{UNITS[j.source]}: <b>{j.processed}/{j.total}</b>  {bar(j.processed, j.total)}")
+    lines += [f"👥 Проверено пользователей: <b>{j.checked}</b>",
+              f"✅ Найдено: <b>{len(j.found)}</b>" + (f" из {j.cap} (лимит тарифа)" if j.cap else ""),
+              f"⭐ Premium: <b>{j.premium}</b> · 💎 NFT: <b>{j.gifts}</b>",
+              f"🚫 Без username (пропущены): <b>{j.no_username}</b> · ⚠️ ошибок: <b>{j.errors}</b>",
+              f"⏳ Прошло: <b>{sec // 60}м {sec % 60}с</b>"]
+    if j.status == "running" and j.current:
+        lines.append(f"📍 {esc(j.current)}")
+    if j.notes:
+        lines += ["", *[f"<i>• {esc(n)}</i>" for n in j.notes]]
+    if j.error:
+        lines += ["", f"❌ {esc(j.error)}"]
+    if j.status != "running":
+        lines.append(SEP)
+        if j.saved:
+            lines.append(f"💾 База <code>{esc(j.tag)}</code>: сохранено <b>{j.saved}</b>")
+        elif not j.found:
+            lines.append("Подходящих пользователей не найдено.")
+        if j.capped:
+            lines.append("🔒 Достигнут лимит парсинга вашего тарифа.")
+    return "\n".join(lines)
