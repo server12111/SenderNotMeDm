@@ -2,7 +2,7 @@
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import settings
@@ -87,11 +87,14 @@ async def ord_cancel(cb: CallbackQuery, callback_data: Nav, session: AsyncSessio
 
 @router.callback_query(Nav.filter(F.a == "ord_paid"))
 async def ord_paid(cb: CallbackQuery, callback_data: Nav, session: AsyncSession, bot: Bot) -> None:
-    o = await session.get(Order, callback_data.id)
-    if not o or o.user_id != cb.from_user.id or o.status != "new":
-        return await cb.answer("Заявка уже отправлена или отменена", show_alert=True)
-    o.status, o.paid_at = "paid", utcnow()
+    res = await session.execute(update(Order).where(
+        Order.id == callback_data.id, Order.user_id == cb.from_user.id, Order.status == "new")
+        .values(status="paid", paid_at=utcnow()))  # атомарно: двойной тап не продублирует заявку админам
     await session.commit()
+    if res.rowcount == 0:
+        return await cb.answer("Заявка уже отправлена или отменена", show_alert=True)
+    o = await session.get(Order, callback_data.id)
+    await session.refresh(o)
     await show(cb, f"🕒 <b>Заявка #{o.id} отправлена на проверку</b>\n{SEP}\nКак только администратор подтвердит "
                    "оплату, тариф активируется и придёт уведомление.", kb(to_main()))
 

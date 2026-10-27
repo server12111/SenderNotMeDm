@@ -17,6 +17,7 @@ from aiogram import Bot
 from sqlalchemy import exists, func, insert, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from telethon import TelegramClient, errors
+from telethon.tl.types import InputPeerUser
 
 from bot.config import settings
 from bot.database.models import Account, BroadcastLog, Campaign, CampaignStatus, DeliveryStatus, ParsedLead
@@ -356,6 +357,10 @@ class BroadcastManager:
         c, client, target = run.c, acc.client, f"@{username.lstrip('@')}"
         text = compose(c.text, c.buttons)
         try:
+            peer = await client.get_input_entity(target)
+            if not isinstance(peer, InputPeerUser):  # @username канала/группы: писать туда нельзя (это был бы пост)
+                return DeliveryStatus.BLOCKED, "не пользователь (канал или чат)"
+            target = peer
             if not run.paths:
                 await client.send_message(target, text, parse_mode="html", link_preview=False)
             elif c.media[0]["type"] == "video_note":

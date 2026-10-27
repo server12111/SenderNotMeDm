@@ -19,6 +19,7 @@ PAGE = 6
 MAX_BYTES = 5 * 1024 * 1024
 USERNAME_RE = re.compile(r"(?:https?://)?(?:t\.me/)?@?([A-Za-z][A-Za-z0-9_]{4,31})\s*$")
 TAG_RE = re.compile(r"^[\w\-]{2,24}$")
+MAX_TAG_BYTES = 28  # "n:lead_del_ok:0:0:" + тег должны помещаться в 64 байта callback_data
 
 
 async def _stats(session: AsyncSession, uid: int, tag: str) -> tuple[int, int]:
@@ -104,7 +105,7 @@ async def lead_new(cb: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(LeadImport.tag)
     await start_panel(state, cb.message)
-    await show(cb, f"📥 <b>Новая база</b>\n{SEP}\nВведите <b>название</b> (латиница/цифры/_/-, до 24 символов), "
+    await show(cb, f"📥 <b>Новая база</b>\n{SEP}\nВведите <b>название</b> (буквы/цифры/_/-, до 24 символов; кириллицей примерно до 14), "
                    "например <code>crypto_chat</code>:", import_cancel())
 
 
@@ -127,8 +128,9 @@ def _ask_data(tag: str) -> str:
 async def got_tag(msg: Message, state: FSMContext) -> None:
     await try_delete(msg)
     tag = msg.text.strip()
-    if not TAG_RE.match(tag):
-        return await panel(msg.bot, state, "❌ Название: 2–24 символа, буквы/цифры/_/-. Ещё раз:", import_cancel())
+    if not TAG_RE.match(tag) or len(tag.encode()) > MAX_TAG_BYTES:
+        return await panel(msg.bot, state, "❌ Название: 2–24 символа (буквы/цифры/_/-), кириллица занимает "
+                                           "больше места: примерно до 14 букв. Ещё раз:", import_cancel())
     await state.update_data(tag=tag)
     await state.set_state(LeadImport.data)
     await panel(msg.bot, state, _ask_data(tag), import_cancel(tag))

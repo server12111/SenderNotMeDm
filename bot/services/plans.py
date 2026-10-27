@@ -56,12 +56,13 @@ async def free_limits(session: AsyncSession) -> Limits:
 
 
 async def active_subscription(session: AsyncSession, user_id: int) -> Subscription | None:
-    """Действующая подписка; «навсегда» приоритетнее, затем та, что истекает позже."""
+    """Действующая подписка: самая щедрая по лимитам (оплаченное не «перебивается» более слабой вечной)."""
     return await session.scalar(
         select(Subscription).where(
             Subscription.user_id == user_id, Subscription.status == "active",
             (Subscription.expires_at.is_(None)) | (Subscription.expires_at > utcnow()))
-        .order_by(case((Subscription.expires_at.is_(None), 1), else_=0).desc(), Subscription.expires_at.desc())
+        .order_by(Subscription.max_accounts.desc(), Subscription.daily_limit.desc(),
+                  case((Subscription.expires_at.is_(None), 1), else_=0).desc(), Subscription.expires_at.desc())
         .limit(1))
 
 
@@ -77,14 +78,22 @@ async def grant_subscription(session: AsyncSession, user_id: int, *, plan_name: 
                              max_accounts: int, daily_limit: int, max_recipients: int, max_parse: int = 0,
                              plan_id: int | None = None, source: str = "admin", amount=0,
                              order_id: int | None = None, granted_by: int | None = None) -> Subscription:
-    """Новая подписка. Если есть действующая с датой окончания, срок добавляется к ней, а старая помечается replaced."""
+    """Новая подписка. Продление ТОГО ЖЕ тарифа добавляет срок к действующему (старая помечается replaced).
+
+    Другой тариф живёт параллельно со своим сроком; действует самый щедрый по лимитам (см. active_subscription),
+    поэтому покупка не обнуляет остаток уже оплаченного.
+    """
     now = utcnow()
-    current = await active_subscription(session, user_id)
+    same = await session.scalar(
+        select(Subscription).where(
+            Subscription.user_id == user_id, Subscription.status == "active", Subscription.expires_at.is_not(None),
+            Subscription.expires_at > now,
+            (Subscription.plan_id == plan_id) if plan_id is not None else (Subscription.plan_name == plan_name))
+        .order_by(Subscription.expires_at.desc()).limit(1))
     start = now
-    if current and current.expires_at:
-        start = max(now, current.expires_at.replace(tzinfo=current.expires_at.tzinfo or timezone.utc))
-    if current and current.expires_at:  # «навсегда» не заменяем
-        await session.execute(update(Subscription).where(Subscription.id == current.id).values(status="replaced"))
+    if same:
+        start = max(now, same.expires_at.replace(tzinfo=same.expires_at.tzinfo or timezone.utc))
+        await session.execute(update(Subscription).where(Subscription.id == same.id).values(status="replaced"))
     sub = Subscription(
         user_id=user_id, plan_id=plan_id, plan_name=plan_name, max_accounts=max_accounts,
         daily_limit=daily_limit, max_recipients=max_recipients, max_parse=max_parse, source=source, amount=amount,

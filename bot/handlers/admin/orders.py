@@ -4,7 +4,7 @@ import math
 from aiogram import F, Router
 from aiogram.exceptions import TelegramAPIError
 from aiogram.types import CallbackQuery
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.models import Order, User
@@ -58,18 +58,26 @@ async def order_open(cb: CallbackQuery, callback_data: Nav, session: AsyncSessio
 
 @router.callback_query(Nav.filter(F.a.in_({"adm_order_ok", "adm_order_no"})))
 async def order_decide(cb: CallbackQuery, callback_data: Nav, session: AsyncSession) -> None:
-    o = await session.get(Order, callback_data.id)
-    if not o or o.status != "paid":
-        return await cb.answer("Заявка уже обработана или не ждёт проверки", show_alert=True)
     ok = callback_data.a == "adm_order_ok"
-    o.status = "confirmed" if ok else "rejected"
-    o.decided_by, o.decided_at = cb.from_user.id, utcnow()
+    # Атомарный «захват» заявки: два админа, нажавшие одновременно, не выдадут тариф дважды
+    res = await session.execute(update(Order).where(Order.id == callback_data.id, Order.status == "paid").values(
+        status="confirmed" if ok else "rejected", decided_by=cb.from_user.id, decided_at=utcnow()))
     await session.commit()
+    if res.rowcount == 0:
+        return await cb.answer("Заявка уже обработана или не ждёт проверки", show_alert=True)
+    o = await session.get(Order, callback_data.id)
+    await session.refresh(o)
     if ok:
-        await grant_subscription(
-            session, o.user_id, plan_name=o.plan_name, days=o.days, max_accounts=o.max_accounts,
-            daily_limit=o.daily_limit, max_recipients=o.max_recipients, max_parse=o.max_parse, plan_id=o.plan_id,
-            source="order", amount=o.price_usd, order_id=o.id, granted_by=cb.from_user.id)
+        try:
+            await grant_subscription(
+                session, o.user_id, plan_name=o.plan_name, days=o.days, max_accounts=o.max_accounts,
+                daily_limit=o.daily_limit, max_recipients=o.max_recipients, max_parse=o.max_parse, plan_id=o.plan_id,
+                source="order", amount=o.price_usd, order_id=o.id, granted_by=cb.from_user.id)
+        except Exception:
+            await session.rollback()  # не оставляем «подтверждённую» заявку без подписки
+            await session.execute(update(Order).where(Order.id == o.id).values(status="paid"))
+            await session.commit()
+            raise
     user_text = (f"✅ Оплата подтверждена! Тариф <b>{esc(o.plan_name)}</b> активирован ({days_text(o.days)})."
                  if ok else f"❌ Заявка #{o.id} отклонена: платёж не найден. Если вы оплатили, свяжитесь с поддержкой.")
     try:

@@ -47,8 +47,11 @@ async def main() -> None:
 
     await manager.recover(live)           # дослать рассылки, прерванные рестартом
     await notice_mgr.recover(notice_live)
-    asyncio.create_task(expiry_loop(bot, sm))  # напоминания и закрытие истёкших подписок
-    await dp.start_polling(bot)
+    expiry_task = asyncio.create_task(expiry_loop(bot, sm))  # ссылка нужна: иначе задачу может собрать GC
+    try:
+        await dp.start_polling(bot)
+    finally:
+        expiry_task.cancel()
 
 
 if __name__ == "__main__":
